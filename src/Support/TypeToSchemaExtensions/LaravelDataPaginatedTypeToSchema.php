@@ -51,10 +51,11 @@ class LaravelDataPaginatedTypeToSchema extends TypeToSchemaExtension
         return (new OpenApiObjectType)
             ->addProperty('items', (new OpenApiArrayType)->setItems($itemsSchema))
             ->addProperty('totalCount', new OpenApiIntegerType)
+            ->addProperty('totalPages', new OpenApiIntegerType)
             ->addProperty('currentPage', new OpenApiIntegerType)
             ->addProperty('perPage', new OpenApiIntegerType)
             ->addProperty('hasMorePages', new OpenApiBooleanType)
-            ->setRequired(['items', 'totalCount', 'currentPage', 'perPage', 'hasMorePages']);
+            ->setRequired(['items', 'totalCount', 'totalPages', 'currentPage', 'perPage', 'hasMorePages']);
     }
 
     public function toResponse(Type $type): Response

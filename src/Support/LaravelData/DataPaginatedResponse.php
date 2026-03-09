@@ -43,6 +43,7 @@ class DataPaginatedResponse implements Responsable
         return [
             'items' => $this->dataClass::collect($this->paginator->items()),
             'totalCount' => $this->paginator->total(),
+            'totalPages' => $this->paginator->lastPage(),
             'currentPage' => $this->paginator->currentPage(),
             'perPage' => $this->paginator->perPage(),
             'hasMorePages' => $this->paginator->hasMorePages(),
