@@ -8,6 +8,7 @@ use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\MethodCallsPar
 use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\ParameterExtractor;
 use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\PathParametersExtractor;
 use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\ValidateCallParametersExtractor;
+use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataParameterExtractor;
 use Illuminate\Support\Arr;
 
 class ParametersExtractors
@@ -67,6 +68,7 @@ class ParametersExtractors
     {
         $base = $this->extractors ?: [
             PathParametersExtractor::class,
+            LaravelDataParameterExtractor::class,
             FormRequestParametersExtractor::class,
             ValidateCallParametersExtractor::class,
         ];

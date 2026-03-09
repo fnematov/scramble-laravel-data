@@ -45,6 +45,7 @@ use Dedoc\Scramble\Support\InferExtensions\ResponseFactoryTypeInfer;
 use Dedoc\Scramble\Support\InferExtensions\ResponseMethodReturnTypeExtension;
 use Dedoc\Scramble\Support\InferExtensions\ShallowFunctionDefinition;
 use Dedoc\Scramble\Support\InferExtensions\TypeTraceInfer;
+use Dedoc\Scramble\Support\InferExtensions\LaravelDataPaginatedInferExtension;
 use Dedoc\Scramble\Support\InferExtensions\ValidatorTypeInfer;
 use Dedoc\Scramble\Support\Type\FunctionType;
 use Dedoc\Scramble\Support\Type\TemplateType;
@@ -63,6 +64,8 @@ use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResourceCollectionTypeToSchema
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResourceResponseTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResponseTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\StreamedResponseToSchema;
+use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataPaginatedTypeToSchema;
+use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\VoidTypeToSchema;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
@@ -152,6 +155,7 @@ class ScrambleServiceProvider extends PackageServiceProvider
                     AfterJsonResourceDefinitionCreatedExtension::class,
                     AfterResourceCollectionDefinitionCreatedExtension::class,
                     AfterAnonymousResourceCollectionDefinitionCreatedExtension::class,
+                    LaravelDataPaginatedInferExtension::class,
                 ]);
 
                 return array_merge(
@@ -222,6 +226,8 @@ class ScrambleServiceProvider extends PackageServiceProvider
                     StreamedResponseToSchema::class,
                     ResourceResponseTypeToSchema::class,
                     PaginatedResourceResponseTypeToSchema::class,
+                    LaravelDataTypeToSchema::class,
+                    LaravelDataPaginatedTypeToSchema::class,
                     VoidTypeToSchema::class,
                 ], $typesToSchemaExtensions),
                 exceptionToResponseExtensionsClasses: $parameters['exceptionToResponseExtensions'] ?? array_merge([
