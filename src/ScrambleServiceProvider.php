@@ -64,6 +64,7 @@ use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResourceCollectionTypeToSchema
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResourceResponseTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\ResponseTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\StreamedResponseToSchema;
+use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataListTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataPaginatedTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\LaravelDataTypeToSchema;
 use Dedoc\Scramble\Support\TypeToSchemaExtensions\VoidTypeToSchema;
@@ -227,6 +228,7 @@ class ScrambleServiceProvider extends PackageServiceProvider
                     ResourceResponseTypeToSchema::class,
                     PaginatedResourceResponseTypeToSchema::class,
                     LaravelDataTypeToSchema::class,
+                    LaravelDataListTypeToSchema::class,
                     LaravelDataPaginatedTypeToSchema::class,
                     VoidTypeToSchema::class,
                 ], $typesToSchemaExtensions),

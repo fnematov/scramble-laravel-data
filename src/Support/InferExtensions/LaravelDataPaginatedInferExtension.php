@@ -6,6 +6,7 @@ use Dedoc\Scramble\Infer\Extensions\Event\MethodCallEvent;
 use Dedoc\Scramble\Infer\Extensions\Event\StaticMethodCallEvent;
 use Dedoc\Scramble\Infer\Extensions\MethodReturnTypeExtension;
 use Dedoc\Scramble\Infer\Extensions\StaticMethodReturnTypeExtension;
+use Dedoc\Scramble\Support\LaravelData\DataListResponse;
 use Dedoc\Scramble\Support\LaravelData\DataPaginatedResponse;
 use Dedoc\Scramble\Support\Type\Generic;
 use Dedoc\Scramble\Support\Type\GenericClassStringType;
@@ -14,8 +15,8 @@ use Dedoc\Scramble\Support\Type\Type;
 use Spatie\LaravelData\Data;
 
 /**
- * Intercepts Data::paginated() and DataPaginatedResponse::from() calls
- * to infer which Data class is being paginated for Scramble docs.
+ * Intercepts Data::paginated(), Data::list(), DataPaginatedResponse::from(),
+ * and DataListResponse::from() calls to infer which Data class is used.
  */
 class LaravelDataPaginatedInferExtension implements MethodReturnTypeExtension, StaticMethodReturnTypeExtension
 {
@@ -27,20 +28,23 @@ class LaravelDataPaginatedInferExtension implements MethodReturnTypeExtension, S
 
         if (is_string($type)) {
             return is_a($type, Data::class, true)
-                || is_a($type, DataPaginatedResponse::class, true);
+                || is_a($type, DataPaginatedResponse::class, true)
+                || is_a($type, DataListResponse::class, true);
         }
 
         return $type->isInstanceOf(Data::class)
-            || $type->isInstanceOf(DataPaginatedResponse::class);
+            || $type->isInstanceOf(DataPaginatedResponse::class)
+            || $type->isInstanceOf(DataListResponse::class);
     }
 
     public function getMethodReturnType(MethodCallEvent $event): ?Type
     {
-        // Handle DataPaginatedResponse::from(UserData::class, $paginator) as instance call
         if ($event->name === 'from' && $event->getInstance()->isInstanceOf(DataPaginatedResponse::class)) {
-            $dataClassArg = $event->getArg('dataClass', 0);
+            return new Generic(DataPaginatedResponse::class, [$event->getArg('dataClass', 0)]);
+        }
 
-            return new Generic(DataPaginatedResponse::class, [$dataClassArg]);
+        if ($event->name === 'from' && $event->getInstance()->isInstanceOf(DataListResponse::class)) {
+            return new Generic(DataListResponse::class, [$event->getArg('dataClass', 0)]);
         }
 
         return null;
@@ -57,11 +61,21 @@ class LaravelDataPaginatedInferExtension implements MethodReturnTypeExtension, S
             return new Generic(DataPaginatedResponse::class, [$dataClassType]);
         }
 
+        // Handle UserData::list($items)
+        if ($event->name === 'list' && is_a($callee, Data::class, true)) {
+            $dataClassType = new GenericClassStringType(new ObjectType($callee));
+
+            return new Generic(DataListResponse::class, [$dataClassType]);
+        }
+
         // Handle DataPaginatedResponse::from(UserData::class, $paginator)
         if ($event->name === 'from' && is_a($callee, DataPaginatedResponse::class, true)) {
-            $dataClassArg = $event->getArg('dataClass', 0);
+            return new Generic(DataPaginatedResponse::class, [$event->getArg('dataClass', 0)]);
+        }
 
-            return new Generic(DataPaginatedResponse::class, [$dataClassArg]);
+        // Handle DataListResponse::from(UserData::class, $items)
+        if ($event->name === 'from' && is_a($callee, DataListResponse::class, true)) {
+            return new Generic(DataListResponse::class, [$event->getArg('dataClass', 0)]);
         }
 
         return null;
