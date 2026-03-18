@@ -30,6 +30,8 @@ use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
 use ReflectionUnionType;
+use Spatie\LaravelData\Attributes\Validation\StringValidationAttribute;
+use Spatie\LaravelData\Attributes\Validation\ValidationAttribute;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\DataCollection;
 
@@ -96,6 +98,7 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
             $propertyType = $property->getType();
 
             $openApiType = self::resolvePropertyType($propertyType, $property, $transformer, $components);
+            $openApiType = self::applyValidationAttributes($property, $openApiType);
             $schema->addProperty($propertyName, $openApiType);
 
             if ($propertyType && ! $propertyType->allowsNull() && ! $property->hasDefaultValue()) {
@@ -314,5 +317,133 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
         }
 
         return null;
+    }
+
+    /**
+     * Apply Spatie Laravel Data validation attributes to the OpenAPI type.
+     */
+    private static function applyValidationAttributes(ReflectionProperty $property, OpenApiType $openApiType): OpenApiType
+    {
+        $attributes = $property->getAttributes(ValidationAttribute::class, \ReflectionAttribute::IS_INSTANCEOF);
+
+        foreach ($attributes as $attribute) {
+            try {
+                $instance = $attribute->newInstance();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (! $instance instanceof StringValidationAttribute) {
+                continue;
+            }
+
+            $keyword = $instance::keyword();
+            $params = $instance->parameters();
+
+            $openApiType = self::applyValidationRule($openApiType, $keyword, $params);
+        }
+
+        return $openApiType;
+    }
+
+    /**
+     * Apply a single validation rule keyword to the OpenAPI type.
+     */
+    private static function applyValidationRule(OpenApiType $type, string $keyword, array $params): OpenApiType
+    {
+        return match ($keyword) {
+            'email' => $type instanceof OpenApiStringType ? $type->format('email') : $type,
+            'url' => $type instanceof OpenApiStringType ? $type->format('uri') : $type,
+            'uuid' => $type instanceof OpenApiStringType ? $type->format('uuid') : $type,
+            'ulid' => $type instanceof OpenApiStringType ? $type->format('ulid') : $type,
+            'ip' => $type instanceof OpenApiStringType ? $type->format('ipv4') : $type,
+            'ipv4' => $type instanceof OpenApiStringType ? $type->format('ipv4') : $type,
+            'ipv6' => $type instanceof OpenApiStringType ? $type->format('ipv6') : $type,
+            'date_format' => self::applyDateFormat($type, $params),
+            'min' => self::applyMinConstraint($type, $params),
+            'max' => self::applyMaxConstraint($type, $params),
+            'size' => self::applySizeConstraint($type, $params),
+            'between' => self::applyBetweenConstraint($type, $params),
+            'regex' => self::applyRegexPattern($type, $params),
+            'nullable' => $type->nullable(true),
+            default => $type,
+        };
+    }
+
+    private static function applyDateFormat(OpenApiType $type, array $params): OpenApiType
+    {
+        if (! $type instanceof OpenApiStringType || empty($params)) {
+            return $type;
+        }
+
+        $format = is_array($params[0]) ? ($params[0][0] ?? null) : $params[0];
+
+        return match ($format) {
+            'Y-m-d' => $type->format('date'),
+            'Y-m-d H:i:s' => $type->format('date-time'),
+            default => $type,
+        };
+    }
+
+    private static function applyMinConstraint(OpenApiType $type, array $params): OpenApiType
+    {
+        if (empty($params) || ! is_numeric($params[0])) {
+            return $type;
+        }
+
+        if ($type instanceof OpenApiStringType || $type instanceof OpenApiArrayType || $type instanceof OpenApiNumberType) {
+            $type->setMin((float) $params[0]);
+        }
+
+        return $type;
+    }
+
+    private static function applyMaxConstraint(OpenApiType $type, array $params): OpenApiType
+    {
+        if (empty($params) || ! is_numeric($params[0])) {
+            return $type;
+        }
+
+        if ($type instanceof OpenApiStringType || $type instanceof OpenApiArrayType || $type instanceof OpenApiNumberType) {
+            $type->setMax((float) $params[0]);
+        }
+
+        return $type;
+    }
+
+    private static function applySizeConstraint(OpenApiType $type, array $params): OpenApiType
+    {
+        $type = self::applyMinConstraint($type, $params);
+
+        return self::applyMaxConstraint($type, $params);
+    }
+
+    private static function applyBetweenConstraint(OpenApiType $type, array $params): OpenApiType
+    {
+        if (count($params) < 2) {
+            return $type;
+        }
+
+        $type = self::applyMinConstraint($type, [$params[0]]);
+
+        return self::applyMaxConstraint($type, [$params[1]]);
+    }
+
+    private static function applyRegexPattern(OpenApiType $type, array $params): OpenApiType
+    {
+        if (empty($params) || ! $type instanceof OpenApiStringType) {
+            return $type;
+        }
+
+        $pattern = $params[0];
+
+        // Strip PHP regex delimiters (e.g., /^[a-z]+$/i → ^[a-z]+$)
+        if (preg_match('#^(.)(.+)\1[a-zA-Z]*$#s', $pattern, $matches)) {
+            $pattern = $matches[2];
+        }
+
+        $type->pattern($pattern);
+
+        return $type;
     }
 }
