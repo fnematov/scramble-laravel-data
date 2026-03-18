@@ -206,11 +206,7 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
         if (is_subclass_of($className, BackedEnum::class)) {
             $cases = $className::cases();
             $values = array_map(fn ($case) => $case->value, $cases);
-            $backingType = (new ReflectionClass($className))
-                ->getMethod('from')
-                ->getParameters()[0]
-                ->getType()
-                ->getName();
+            $backingType = (new \ReflectionEnum($className))->getBackingType()?->getName();
 
             $openApiType = $backingType === 'int' ? new OpenApiIntegerType : new OpenApiStringType;
             $openApiType->enum($values);
