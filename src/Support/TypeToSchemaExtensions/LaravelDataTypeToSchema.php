@@ -230,10 +230,15 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
 
         // Nested Data classes
         if (is_subclass_of($className, Data::class)) {
+            // Self-referencing: return plain object to avoid infinite nesting
+            if (isset(self::$buildingClasses[$className])) {
+                return new OpenApiObjectType;
+            }
+
             if ($transformer && $components) {
                 $ref = ClassBasedReference::create('schemas', $className, $components);
 
-                if (! $components->hasSchema($ref->fullName) && ! isset(self::$buildingClasses[$className])) {
+                if (! $components->hasSchema($ref->fullName)) {
                     $schema = self::buildSchemaFromDataClass($className, $transformer, $components);
                     $components->addSchema($ref->fullName, Schema::fromType($schema));
                 }
@@ -274,10 +279,15 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
                     $itemClassName = self::resolveClassName($itemClassName, $property);
 
                     if ($itemClassName && is_subclass_of($itemClassName, Data::class)) {
+                        // Self-referencing: return plain array to avoid infinite nesting
+                        if (isset(self::$buildingClasses[$itemClassName])) {
+                            return $arrayType;
+                        }
+
                         if ($transformer && $components) {
                             $ref = ClassBasedReference::create('schemas', $itemClassName, $components);
 
-                            if (! $components->hasSchema($ref->fullName) && ! isset(self::$buildingClasses[$itemClassName])) {
+                            if (! $components->hasSchema($ref->fullName)) {
                                 $schema = self::buildSchemaFromDataClass($itemClassName, $transformer, $components);
                                 $components->addSchema($ref->fullName, Schema::fromType($schema));
                             }
@@ -287,12 +297,9 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
                             return $arrayType;
                         }
 
-                        // Skip inlining self-referencing classes without components (no $ref available)
-                        if (! isset(self::$buildingClasses[$itemClassName])) {
-                            $arrayType->setItems(
-                                self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
-                            );
-                        }
+                        $arrayType->setItems(
+                            self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
+                        );
 
                         return $arrayType;
                     }
