@@ -37,6 +37,9 @@ use Spatie\LaravelData\DataCollection;
 
 class LaravelDataTypeToSchema extends TypeToSchemaExtension
 {
+    /** @var array<string, bool> Track classes currently being built to prevent infinite recursion */
+    private static array $buildingClasses = [];
+
     protected OpenApiContext $openApiContext;
 
     public function __construct(
@@ -85,32 +88,43 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
         ?TypeTransformer $transformer = null,
         ?Components $components = null,
     ): OpenApiObjectType {
-        $reflection = new ReflectionClass($className);
-        $schema = new OpenApiObjectType;
-        $required = [];
-
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            if ($property->isStatic()) {
-                continue;
-            }
-
-            $propertyName = $property->getName();
-            $propertyType = $property->getType();
-
-            $openApiType = self::resolvePropertyType($propertyType, $property, $transformer, $components);
-            $openApiType = self::applyValidationAttributes($property, $openApiType);
-            $schema->addProperty($propertyName, $openApiType);
-
-            if ($propertyType && ! $propertyType->allowsNull() && ! $property->hasDefaultValue()) {
-                $required[] = $propertyName;
-            }
+        // Prevent infinite recursion for self-referencing Data classes
+        if (isset(self::$buildingClasses[$className])) {
+            return new OpenApiObjectType;
         }
 
-        if ($required) {
-            $schema->setRequired($required);
-        }
+        self::$buildingClasses[$className] = true;
 
-        return $schema;
+        try {
+            $reflection = new ReflectionClass($className);
+            $schema = new OpenApiObjectType;
+            $required = [];
+
+            foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+                if ($property->isStatic()) {
+                    continue;
+                }
+
+                $propertyName = $property->getName();
+                $propertyType = $property->getType();
+
+                $openApiType = self::resolvePropertyType($propertyType, $property, $transformer, $components);
+                $openApiType = self::applyValidationAttributes($property, $openApiType);
+                $schema->addProperty($propertyName, $openApiType);
+
+                if ($propertyType && ! $propertyType->allowsNull() && ! $property->hasDefaultValue()) {
+                    $required[] = $propertyName;
+                }
+            }
+
+            if ($required) {
+                $schema->setRequired($required);
+            }
+
+            return $schema;
+        } finally {
+            unset(self::$buildingClasses[$className]);
+        }
     }
 
     private static function resolvePropertyType(
@@ -236,7 +250,7 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
         }
 
         // Laravel/Spatie collections
-        if (is_subclass_of($className, Collection::class) || is_subclass_of($className, DataCollection::class)) {
+        if (is_subclass_of($className, Collection::class) || is_a($className, DataCollection::class, true)) {
             return self::resolveArrayType($property, $transformer, $components);
         }
 
