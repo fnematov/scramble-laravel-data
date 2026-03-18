@@ -271,43 +271,142 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
 
         $docComment = $property->getDocComment();
 
-        if ($docComment) {
-            if (preg_match('/@var\s+(?:array<([^>]+)>|([^\s[]+)\[\]|DataCollection<([^>]+)>|Collection<([^>]+)>)/', $docComment, $matches)) {
-                $itemClassName = $matches[1] ?: $matches[2] ?: $matches[3] ?: $matches[4] ?: null;
+        if (! $docComment) {
+            return $arrayType;
+        }
 
-                if ($itemClassName) {
-                    $itemClassName = self::resolveClassName($itemClassName, $property);
+        // Try to extract item type from @var annotation
+        $itemType = self::extractArrayItemType($docComment);
 
-                    if ($itemClassName && is_subclass_of($itemClassName, Data::class)) {
-                        // Self-referencing: return plain array to avoid infinite nesting
-                        if (isset(self::$buildingClasses[$itemClassName])) {
-                            return $arrayType;
-                        }
+        if ($itemType === null) {
+            return $arrayType;
+        }
 
-                        if ($transformer && $components) {
-                            $ref = ClassBasedReference::create('schemas', $itemClassName, $components);
+        // Shape type: array{key: type, ...}
+        if ($shapeSchema = self::parseShapeType($itemType)) {
+            $arrayType->setItems($shapeSchema);
 
-                            if (! $components->hasSchema($ref->fullName)) {
-                                $schema = self::buildSchemaFromDataClass($itemClassName, $transformer, $components);
-                                $components->addSchema($ref->fullName, Schema::fromType($schema));
-                            }
+            return $arrayType;
+        }
 
-                            $arrayType->setItems($ref);
+        // Class name (Data class)
+        $itemClassName = self::resolveClassName($itemType, $property);
 
-                            return $arrayType;
-                        }
-
-                        $arrayType->setItems(
-                            self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
-                        );
-
-                        return $arrayType;
-                    }
-                }
+        if ($itemClassName && is_subclass_of($itemClassName, Data::class)) {
+            // Self-referencing: return plain array to avoid infinite nesting
+            if (isset(self::$buildingClasses[$itemClassName])) {
+                return $arrayType;
             }
+
+            if ($transformer && $components) {
+                $ref = ClassBasedReference::create('schemas', $itemClassName, $components);
+
+                if (! $components->hasSchema($ref->fullName)) {
+                    $schema = self::buildSchemaFromDataClass($itemClassName, $transformer, $components);
+                    $components->addSchema($ref->fullName, Schema::fromType($schema));
+                }
+
+                $arrayType->setItems($ref);
+
+                return $arrayType;
+            }
+
+            $arrayType->setItems(
+                self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
+            );
+
+            return $arrayType;
+        }
+
+        // Primitive item type
+        if ($primitiveType = self::resolvePrimitiveType($itemType)) {
+            $arrayType->setItems($primitiveType);
         }
 
         return $arrayType;
+    }
+
+    /**
+     * Extract the array item type string from a @var doc comment.
+     */
+    private static function extractArrayItemType(string $docComment): ?string
+    {
+        // array<int, ValueType> or array<ValueType>
+        if (preg_match('/@var\s+array<(?:[^,>]+,\s*)?(.+)>/', $docComment, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // ClassName[] or ClassName[]|null
+        if (preg_match('/@var\s+([^\s\[|]+)\[\]/', $docComment, $matches)) {
+            return $matches[1];
+        }
+
+        // DataCollection<ClassName> or Collection<ClassName>
+        if (preg_match('/@var\s+(?:DataCollection|Collection)<([^>]+)>/', $docComment, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse a PHPDoc shape type like array{key: type, ...} into an OpenAPI ObjectType.
+     */
+    private static function parseShapeType(string $typeStr): ?OpenApiObjectType
+    {
+        if (! preg_match('/^array\{(.+)\}$/', $typeStr, $matches)) {
+            return null;
+        }
+
+        $schema = new OpenApiObjectType;
+        $required = [];
+        $fields = preg_split('/,\s*/', $matches[1]);
+
+        foreach ($fields as $field) {
+            $field = trim($field);
+
+            if (! preg_match('/^(\w+)(\?)?\s*:\s*(.+)$/', $field, $parts)) {
+                continue;
+            }
+
+            $name = $parts[1];
+            $optional = $parts[2] === '?';
+            $fieldType = trim($parts[3]);
+
+            $openApiType = self::resolvePrimitiveType($fieldType) ?? new OpenApiUnknownType;
+
+            if ($optional || str_ends_with($fieldType, '|null')) {
+                $openApiType->nullable(true);
+            }
+
+            $schema->addProperty($name, $openApiType);
+
+            if (! $optional && ! str_ends_with($fieldType, '|null')) {
+                $required[] = $name;
+            }
+        }
+
+        if ($required) {
+            $schema->setRequired($required);
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Resolve a primitive type string to an OpenAPI type.
+     */
+    private static function resolvePrimitiveType(string $typeStr): ?OpenApiType
+    {
+        $typeStr = str_replace('|null', '', $typeStr);
+
+        return match ($typeStr) {
+            'string' => new OpenApiStringType,
+            'int', 'integer' => new OpenApiIntegerType,
+            'float', 'double', 'number' => new OpenApiNumberType,
+            'bool', 'boolean' => new OpenApiBooleanType,
+            default => null,
+        };
     }
 
     private static function resolveClassName(string $shortName, ReflectionProperty $property): ?string
