@@ -233,7 +233,7 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
             if ($transformer && $components) {
                 $ref = ClassBasedReference::create('schemas', $className, $components);
 
-                if (! $components->hasSchema($ref->fullName)) {
+                if (! $components->hasSchema($ref->fullName) && ! isset(self::$buildingClasses[$className])) {
                     $schema = self::buildSchemaFromDataClass($className, $transformer, $components);
                     $components->addSchema($ref->fullName, Schema::fromType($schema));
                 }
@@ -277,7 +277,7 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
                         if ($transformer && $components) {
                             $ref = ClassBasedReference::create('schemas', $itemClassName, $components);
 
-                            if (! $components->hasSchema($ref->fullName)) {
+                            if (! $components->hasSchema($ref->fullName) && ! isset(self::$buildingClasses[$itemClassName])) {
                                 $schema = self::buildSchemaFromDataClass($itemClassName, $transformer, $components);
                                 $components->addSchema($ref->fullName, Schema::fromType($schema));
                             }
@@ -287,9 +287,12 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
                             return $arrayType;
                         }
 
-                        $arrayType->setItems(
-                            self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
-                        );
+                        // Skip inlining self-referencing classes without components (no $ref available)
+                        if (! isset(self::$buildingClasses[$itemClassName])) {
+                            $arrayType->setItems(
+                                self::buildSchemaFromDataClass($itemClassName, $transformer, $components)
+                            );
+                        }
 
                         return $arrayType;
                     }
