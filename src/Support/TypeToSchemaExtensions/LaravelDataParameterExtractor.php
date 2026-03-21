@@ -4,6 +4,7 @@ namespace Dedoc\Scramble\Support\TypeToSchemaExtensions;
 
 use Dedoc\Scramble\Support\Generator\Parameter;
 use Dedoc\Scramble\Support\Generator\Schema;
+use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\FormRequestParametersExtractor;
 use Dedoc\Scramble\Support\OperationExtensions\ParameterExtractor\ParameterExtractor;
 use Dedoc\Scramble\Support\OperationExtensions\RequestBodyExtension;
 use Dedoc\Scramble\Support\OperationExtensions\RulesExtractor\ParametersExtractionResult;
@@ -23,6 +24,10 @@ class LaravelDataParameterExtractor implements ParameterExtractor
         if (! $dataClassName = $this->getDataClassName($routeInfo)) {
             return $parameterExtractionResults;
         }
+
+        // Data classes with rules() are also detected by FormRequestParametersExtractor.
+        // Tell it to skip this class since we handle it here with better type resolution.
+        FormRequestParametersExtractor::ignoreInstanceOf($dataClassName);
 
         $in = in_array(mb_strtolower($routeInfo->method), RequestBodyExtension::HTTP_METHODS_WITHOUT_REQUEST_BODY)
             ? 'query'
