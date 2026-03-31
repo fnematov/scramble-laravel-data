@@ -11,7 +11,7 @@ class ExportDocumentation extends Command
 {
     protected $signature = 'scramble:export
         {--path= : The path to save the exported JSON file}
-        {--api=default : The API to export a documentation for}
+        {--api=all : The API to export a documentation for (use "all" to export all APIs)}
     ';
 
     protected $description = 'Export the OpenAPI document to a JSON file.';
@@ -19,8 +19,25 @@ class ExportDocumentation extends Command
     public function handle(Generator $generator): void
     {
         $api = $this->option('api');
-        $path = $this->option('path');
 
+        if ($api === 'all') {
+            $this->exportAll($generator);
+
+            return;
+        }
+
+        $this->export($generator, $api, $this->option('path'));
+    }
+
+    private function exportAll(Generator $generator): void
+    {
+        foreach (Scramble::getConfigurationsInstance()->all() as $api => $config) {
+            $this->export($generator, $api);
+        }
+    }
+
+    private function export(Generator $generator, string $api, ?string $path = null): void
+    {
         $config = Scramble::getGeneratorConfig($api);
 
         $specification = json_encode($generator($config), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
