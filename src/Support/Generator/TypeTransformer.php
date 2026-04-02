@@ -86,14 +86,15 @@ class TypeTransformer
             $type instanceof \Dedoc\Scramble\Support\Type\KeyedArrayType
             && $type->isList
         ) {
+            $visibleItems = collect($type->items)->reject(fn (ArrayItemType_ $item) => $this->isHiddenArrayItem($item))->values()->all();
             /** @see https://stackoverflow.com/questions/57464633/how-to-define-a-json-array-with-concrete-item-definition-for-every-index-i-e-a */
             $openApiType = (new ArrayType)
-                ->setMin(count($type->items))
-                ->setMax(count($type->items))
+                ->setMin(count($visibleItems))
+                ->setMax(count($visibleItems))
                 ->setPrefixItems(
                     array_map(
                         fn ($item) => $this->transform($item->value),
-                        $type->items
+                        $visibleItems
                     )
                 )
                 ->setAdditionalItems(false);
@@ -105,6 +106,7 @@ class TypeTransformer
             $requiredKeys = [];
 
             $props = collect($type->items)
+                ->reject(fn (ArrayItemType_ $item) => $this->isHiddenArrayItem($item))
                 ->mapWithKeys(function (ArrayItemType_ $item) use (&$requiredKeys) {
                     if (! $item->isOptional) {
                         $requiredKeys[] = $item->key;
@@ -218,7 +220,16 @@ class TypeTransformer
                 // In case $otherTypes consist just of null and there is string or integer literals, make type nullable
                 $otherTypesIsNullable = count($otherTypes) === 1 && collect($otherTypes)->contains(fn ($t) => $t instanceof \Dedoc\Scramble\Support\Type\NullType);
                 if ($otherTypesIsNullable && ($stringLiterals->count() || $integerLiterals->count())) {
-                    $items = array_map(fn ($s) => $s->nullable(true), $literalSchemas);
+                    $items = array_map(function ($s) {
+                        $s->nullable(true);
+                        // Per JSON Schema type and enum are independent constraints.
+                        // When type allows null, enum must also include null or it will reject valid null values.
+                        if (count($s->enum) > 0) {
+                            $s->enum(array_merge($s->enum, [null]));
+                        }
+
+                        return $s;
+                    }, $literalSchemas);
                 }
 
                 // Removing duplicated schemas before making a resulting AnyOf type.
@@ -423,5 +434,21 @@ class TypeTransformer
         }
 
         return null;
+    }
+
+    private function isHiddenArrayItem(ArrayItemType_ $item): bool
+    {
+        /** @var PhpDocNode|null $arrayItemDocNode */
+        $arrayItemDocNode = $item->getAttribute('docNode');
+        /** @var PhpDocNode|null $valueDocNode */
+        $valueDocNode = $item->value->getAttribute('docNode');
+
+        foreach ([$arrayItemDocNode, $valueDocNode] as $docNode) {
+            if ($docNode && count($docNode->getTagsByName('@hidden')) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

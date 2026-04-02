@@ -105,6 +105,28 @@ class ReferenceTypeResolver
         });
     }
 
+    private function finalizeSelf(Type $type, Type $concreteSelfType): Type
+    {
+        return (new TypeWalker)->map($type, function (Type $t) use ($concreteSelfType) {
+            return $t instanceof SelfType ? $concreteSelfType : $t;
+        });
+    }
+
+    /**
+     * Replaces `SelfType` to `$calledOnType` only if it is coming from PHPDoc annotation (empty name). For now this
+     * happens only when argument type is augmented by {@see TemplateTypesSolver::addContextTypesToTypelessParametersOfCallableArgument}.
+     */
+    private function finalizeSelfForCallableArguments(Type $type, Type $calledOnType): Type
+    {
+        return (new TypeWalker)->map($type, function (Type $t) use ($calledOnType) {
+            if (! $t instanceof SelfType || $t->name !== '') {
+                return $t;
+            }
+
+            return $calledOnType;
+        });
+    }
+
     private function resolveLateTypeEarly(LateResolvingType $type): Type
     {
         if (! $type->isResolvable()) {
@@ -470,12 +492,6 @@ class ReferenceTypeResolver
         /* When this is a handling for method call */
         ObjectType|SelfType|null $calledOnType = null,
     ): Type {
-        $returnType = $callee->getReturnType();
-
-        if ($isSelf = $returnType instanceof SelfType && $calledOnType) {
-            $returnType = $calledOnType;
-        }
-
         $classDefinition = $calledOnType instanceof ObjectType ? $this->index->getClass($calledOnType->name) : null;
 
         $classContextTemplates = $calledOnType && $classDefinition
@@ -489,6 +505,19 @@ class ReferenceTypeResolver
                 $callee,
                 $classContextTemplates,
             ));
+
+        $returnType = $callee->getReturnType();
+
+        /*
+         * Return type: PhpDoc `self` / `$this` placeholders bind to the method receiver (`$calledOnType`).
+         * Arguments: same for PhpDoc placeholders (`SelfType` with empty name); expression-inferred `$this`
+         * already uses `SelfType` with the lexical class name and must not be overwritten by the receiver.
+         */
+        if ($calledOnType) {
+            $returnType = $this->finalizeSelf($returnType, $calledOnType);
+
+            $arguments = $arguments->map(fn ($argType) => $this->finalizeSelfForCallableArguments($argType, $calledOnType));
+        }
 
         $templatesMap = (new TemplateTypesSolver)
             ->getFunctionContextTemplates($callee, $arguments)
@@ -506,6 +535,9 @@ class ReferenceTypeResolver
                 $templatesMap,
             );
         }
+
+        // void (unresolved) template types that are still present in the type, as this is probably an error
+        // @todo maybe better way to handle? just replacing to unknown (even taking is into account breaks a LOT, these templates will probably make sense later)
 
         return $returnType;
     }

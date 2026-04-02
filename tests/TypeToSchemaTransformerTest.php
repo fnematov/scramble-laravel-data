@@ -83,7 +83,7 @@ it('transforms nullable unions', function ($type, $openApiArrayed) {
         new LiteralStringType('charging'),
         new LiteralStringType('discharging'),
         new NullType,
-    ]), ['type' => ['string', 'null'], 'enum' => ['idle', 'charging', 'discharging']]],
+    ]), ['type' => ['string', 'null'], 'enum' => ['idle', 'charging', 'discharging', null]]],
 ]);
 
 it('gets json resource type', function () {
@@ -410,6 +410,20 @@ it('supports @deprecated tag in api resource', function () {
     ]);
 });
 
+it('excludes properties with @hidden annotation from api resource schema', function () {
+    $transformer = new TypeTransformer($infer = app(Infer::class), $this->context, [JsonResourceTypeToSchema::class]);
+
+    $type = new ObjectType(ApiResourceTest_ResourceWithHidden::class);
+
+    expect($transformer->transform($type)->toArray())->toBe([
+        '$ref' => '#/components/schemas/ApiResourceTest_ResourceWithHidden',
+    ]);
+
+    $properties = $this->context->openApi->components->getSchema(ApiResourceTest_ResourceWithHidden::class)->toArray()['properties'];
+    expect($properties)->toHaveKey('visible')
+        ->and($properties)->not->toHaveKey('secret');
+});
+
 it('supports simple comments descriptions in api resource', function () {
     $transformer = new TypeTransformer($infer = app(Infer::class), $this->context, [JsonResourceTypeToSchema::class]);
 
@@ -698,6 +712,23 @@ class ApiResourceTest_ResourceWithDeprecated extends JsonResource
              * @deprecated Use new_field instead.
              */
             'old_field_with_description' => $this->title,
+        ];
+    }
+}
+
+/**
+ * @property SamplePostModel $resource
+ */
+class ApiResourceTest_ResourceWithHidden extends JsonResource
+{
+    public function toArray($request)
+    {
+        return [
+            'visible' => $this->id,
+            /**
+             * @hidden
+             */
+            'secret' => $this->title,
         ];
     }
 }
