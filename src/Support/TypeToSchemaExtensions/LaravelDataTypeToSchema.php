@@ -318,6 +318,15 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
             return $arrayType;
         }
 
+        // File upload item type
+        if ($itemClassName && ($itemClassName === UploadedFile::class || is_subclass_of($itemClassName, UploadedFile::class))) {
+            $arrayType->setItems(
+                (new OpenApiStringType)->format('binary')->contentMediaType('application/octet-stream')
+            );
+
+            return $arrayType;
+        }
+
         // Enum item type
         if ($itemClassName && is_subclass_of($itemClassName, BackedEnum::class)) {
             $cases = $itemClassName::cases();
