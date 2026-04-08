@@ -282,11 +282,9 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
             return $arrayType;
         }
 
-        // Shape type: array{key: type, ...}
+        // Shape type: array{key: type, ...} — return as object, not array
         if ($shapeSchema = self::parseShapeType($itemType)) {
-            $arrayType->setItems($shapeSchema);
-
-            return $arrayType;
+            return $shapeSchema;
         }
 
         // Class name (Data class)
@@ -353,6 +351,11 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
      */
     private static function extractArrayItemType(string $docComment): ?string
     {
+        // array{key: type, ...} shape syntax
+        if (preg_match('/@var\s+(array\{.+\})/', $docComment, $matches)) {
+            return trim($matches[1]);
+        }
+
         // array<int, ValueType> or array<ValueType>
         if (preg_match('/@var\s+array<(?:[^,>]+,\s*)?(.+)>/', $docComment, $matches)) {
             return trim($matches[1]);
