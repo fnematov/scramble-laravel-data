@@ -318,6 +318,19 @@ class LaravelDataTypeToSchema extends TypeToSchemaExtension
             return $arrayType;
         }
 
+        // Enum item type
+        if ($itemClassName && is_subclass_of($itemClassName, BackedEnum::class)) {
+            $cases = $itemClassName::cases();
+            $values = array_map(fn ($case) => $case->value, $cases);
+            $backingType = (new \ReflectionEnum($itemClassName))->getBackingType()?->getName();
+
+            $enumType = $backingType === 'int' ? new OpenApiIntegerType : new OpenApiStringType;
+            $enumType->enum($values);
+            $arrayType->setItems($enumType);
+
+            return $arrayType;
+        }
+
         // Primitive item type
         if ($primitiveType = self::resolvePrimitiveType($itemType)) {
             $arrayType->setItems($primitiveType);
